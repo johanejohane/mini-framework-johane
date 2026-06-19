@@ -44,7 +44,7 @@ public class FrontControllerServlet extends HttpServlet {
 
         try (PrintWriter out = response.getWriter()) {
             out.println("URL interceptee : " + url);
-            out.println("-Framework maison de Johane reel bad man-");
+            out.println("-Framework maison de Johane-");
 
             for (String classe : listeClasse) {
                 out.println(classe);
