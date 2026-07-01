@@ -1,23 +1,187 @@
 package johane.util;
 
-import java.util.ArrayList;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Target;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+import java.util.*;
 import java.util.List;
 
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ScanResult;
-import johane.annotation.MonController;
+
 public class LoadingClass {
-    public static boolean hasAnnotation(Class<?>classscanned)
-    {
-        return classscanned.isAnnotationPresent(MonController.class);
+
+    private static ClassGraph buildClassGraph() {
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        return new ClassGraph().enableAllInfo().overrideClassLoaders(cl);
+    }
+
+    private static Class<?> loadClass(String name) throws ClassNotFoundException {
+        return Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+    }
+
+    public static boolean hasAnnotation(Class<?> clazzScanned, String monAnnotation) {
+        try {
+            Class<?> clazz = loadClass(monAnnotation);
+            Class<? extends Annotation> annotationClass = clazz.asSubclass(Annotation.class);
+
+            Target target = annotationClass.getAnnotation(Target.class);
+
+            if (target != null && Arrays.asList(target.value()).contains(ElementType.METHOD)) {
+                return Arrays.stream(clazzScanned.getDeclaredMethods())
+                        .anyMatch(m -> m.isAnnotationPresent(annotationClass));
+            }
+
+            return clazzScanned.isAnnotationPresent(annotationClass);
+
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Annotation non trouvée : " + monAnnotation, e);
+        }
+    }
+
+    public static List<String> loadClassWithMyAnnotation(String packageName, List<String> mesAnnotations) {
+        List<String> listeClasse = new ArrayList<>();
+        try (ScanResult scanResult = buildClassGraph().acceptPackages(packageName).scan()) {
+            if (mesAnnotations.size() < 1) {
+                return listeClasse;
+            }
+            ClassInfoList classesAvecAnnotation = scanResult.getAllClasses();
+            for (ClassInfo kilassy : classesAvecAnnotation) {
+                try {
+                    Class<?> clazz = loadClass(kilassy.getName());
+                    boolean hasAllAnnotations = true;
+
+                    for (String monAnnotation : mesAnnotations) {
+                        if (!hasAnnotation(clazz, monAnnotation)) {
+                            hasAllAnnotations = false;
+                            break;
+                        }
+                    }
+                    if (hasAllAnnotations) {
+                        listeClasse.add(kilassy.getName());
+                    }
+                } catch (ClassNotFoundException e) {
+                    throw new RuntimeException("Erreur lors du chargement de la classe : " + kilassy.getName(), e);
+                }
+            }
+        }
+        return listeClasse;
+    }
+
+    public static boolean isARouteInsideMapping(String url, Map<String, Mapping> routes) {
+        return routes.containsKey(url);
+    }
+
+    public static boolean isARouteInsideMappingWithMethod(UrlMethod urlMethod, Map<UrlMethod, Mapping> routes) {
+        return routes.containsKey(urlMethod);
+    }
+
+    public static Map<UrlMethod, Mapping> loadUrlMappingsWithMethod(String packageName, String monAnnotationClasse,
+            String monAnnotationMethode) {
+        Map<UrlMethod, Mapping> routes = new HashMap<>();
+
+        try (ScanResult scanResult = buildClassGraph().acceptPackages(packageName).scan()) {
+            ClassInfoList classesInfo = scanResult.getAllClasses();
+
+            for (ClassInfo classInfo : classesInfo) {
+                try {
+                    Class<?> clazz = loadClass(classInfo.getName());
+
+                    if (!hasAnnotation(clazz, monAnnotationClasse)) {
+                        continue;
+                    }
+
+                    Class<?> annotationMethodeClass = loadClass(monAnnotationMethode);
+                    Class<? extends Annotation> urlMappingAnnotationClass = annotationMethodeClass
+                            .asSubclass(Annotation.class);
+
+                    for (Method method : clazz.getDeclaredMethods()) {
+                        Annotation urlMapping = method.getAnnotation(urlMappingAnnotationClass);
+                        if (urlMapping != null) {
+                            String url = (String) urlMappingAnnotationClass
+                                    .getMethod("value")
+                                    .invoke(urlMapping);
+                            String methodType = (String) urlMappingAnnotationClass
+                                    .getMethod("method")
+                                    .invoke(urlMapping);
+
+                            UrlMethod urlMethod = new UrlMethod(url, methodType);
+                            routes.put(urlMethod, new Mapping(clazz, method));
+                        }
+                    }
+
+                } catch (ClassNotFoundException e) {
+                    throw new RuntimeException("Erreur lors du chargement de la classe : " + classInfo.getName(), e);
+                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                    throw new RuntimeException("Erreur lors de la lecture de l'annotation " + monAnnotationMethode, e);
+                }
+            }
+        }
+
+        return routes;
+    }
+
+    public static Map<String, Mapping> loadUrlMappings(String packageName, String monAnnotationClasse,
+            String monAnnotationMethode) {
+        Map<String, Mapping> routes = new HashMap<>();
+
+        try (ScanResult scanResult = buildClassGraph().acceptPackages(packageName).scan()) {
+            ClassInfoList classesInfo = scanResult.getAllClasses();
+
+            for (ClassInfo classInfo : classesInfo) {
+                try {
+                    Class<?> clazz = loadClass(classInfo.getName());
+
+                    if (!hasAnnotation(clazz, monAnnotationClasse)) {
+                        continue;
+                    }
+
+                    Class<?> annotationMethodeClass = loadClass(monAnnotationMethode);
+                    Class<? extends Annotation> urlMappingAnnotationClass = annotationMethodeClass
+                            .asSubclass(Annotation.class);
+
+                    for (Method method : clazz.getDeclaredMethods()) {
+                        Annotation urlMapping = method.getAnnotation(urlMappingAnnotationClass);
+                        if (urlMapping != null) {
+                            String url = (String) urlMappingAnnotationClass
+                                    .getMethod("value")
+                                    .invoke(urlMapping);
+
+                            routes.put(url, new Mapping(clazz, method));
+                        }
+                    }
+
+                } catch (ClassNotFoundException e) {
+                    throw new RuntimeException("Erreur lors du chargement de la classe : " + classInfo.getName(), e);
+                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+                    throw new RuntimeException("Erreur lors de la lecture de l'annotation " + monAnnotationMethode, e);
+                }
+            }
+        }
+
+        return routes;
     }
 
     public static List<String> loadClassWithMyAnnotation(String packageName, String monAnnotation) {
         List<String> listeClasse = new ArrayList<>();
-        try (ScanResult scanResult = new ClassGraph().enableAllInfo().acceptPackages(packageName).scan()) {
+        try (ScanResult scanResult = buildClassGraph().acceptPackages(packageName).scan()) {
             ClassInfoList classesAvecAnnotation = scanResult.getClassesWithAnnotation(monAnnotation);
+            for (ClassInfo classInfo : classesAvecAnnotation) {
+                listeClasse.add(classInfo.getName());
+            }
+        }
+        return listeClasse;
+    }
+
+    public static List<String> loadClassWithMyMethodeAnnotation(String packageName, String monAnnotation) {
+        List<String> listeClasse = new ArrayList<>();
+        try (ScanResult scanResult = buildClassGraph().acceptPackages(packageName).scan()) {
+            ClassInfoList classesAvecAnnotation = scanResult.getClassesWithMethodAnnotation(monAnnotation);
             for (ClassInfo classInfo : classesAvecAnnotation) {
                 listeClasse.add(classInfo.getName());
             }
@@ -27,11 +191,7 @@ public class LoadingClass {
 
     public static List<String> loadClassWithMyAnnotation(String monAnnotation) {
         List<String> listeClasse = new ArrayList<>();
-
-        try (ScanResult scanResult = new ClassGraph()
-                .enableAllInfo()
-                .scan()) {
-
+        try (ScanResult scanResult = buildClassGraph().scan()) {
             ClassInfoList classesAvecAnnotation = scanResult.getClassesWithAnnotation(monAnnotation);
             for (ClassInfo classInfo : classesAvecAnnotation) {
                 listeClasse.add(classInfo.getName());
@@ -42,13 +202,9 @@ public class LoadingClass {
 
     public static List<String> loadAllClasses() {
         List<String> listeClasse = new ArrayList<>();
-
-        try (ScanResult scanResult = new ClassGraph()
-                .enableAllInfo()
-                .scan()) {
-
-            ClassInfoList classesAvecAnnotation = scanResult.getAllClasses();
-            for (ClassInfo classInfo : classesAvecAnnotation) {
+        try (ScanResult scanResult = buildClassGraph().scan()) {
+            ClassInfoList toutes = scanResult.getAllClasses();
+            for (ClassInfo classInfo : toutes) {
                 listeClasse.add(classInfo.getName());
             }
         }
