@@ -1,4 +1,3 @@
-
 package johane.annotation;
 
 import java.lang.annotation.*;
