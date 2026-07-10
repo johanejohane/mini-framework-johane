@@ -1,5 +1,6 @@
 johane/util/LoadingClass.class
 johane/util/UrlMethod.class
+johane/util/ModAndView.class
 johane/annotation/MonController.class
 johane/listener/AppServletContextListener.class
 johane/annotation/UrlMapping.class

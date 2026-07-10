@@ -8,6 +8,8 @@ import java.lang.reflect.Method;
 import java.io.IOException;
 import java.io.InputStream;
 
+import java.io.IOException;
+import java.io.InputStream;
 
 import java.util.*;
 import java.util.List;
@@ -16,8 +18,6 @@ import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ScanResult;
-
-
 
 public class LoadingClass {
     private static Properties loadConfigProperties() {
