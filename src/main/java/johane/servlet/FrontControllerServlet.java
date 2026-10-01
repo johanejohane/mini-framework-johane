@@ -6,12 +6,15 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 
+import org.springframework.context.ApplicationContext;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
 import johane.util.LoadingClass;
 import johane.util.Mapping;
 import johane.util.ModAndView;
@@ -22,14 +25,18 @@ public class FrontControllerServlet extends HttpServlet {
     Map<UrlMethod, Mapping> routesWithMethod;
     String viewPrefix;
     String viewSuffix;
+    String annotationRest;
+    ApplicationContext springContext;
 
     @SuppressWarnings("unchecked")
     @Override
     public void init() throws ServletException {
         super.init();
         routesWithMethod = (Map<UrlMethod, Mapping>) getServletContext().getAttribute("routesWithMethod");
-        viewPrefix = (String)getServletContext().getAttribute("prefix");
-        viewSuffix = (String)getServletContext().getAttribute("suffix");
+        viewPrefix = (String) getServletContext().getAttribute("prefix");
+        viewSuffix = (String) getServletContext().getAttribute("suffix");
+        annotationRest = (String) getServletContext().getAttribute("annotationRest");
+        springContext = (ApplicationContext) getServletContext().getAttribute("springContext");
     }
 
     @Override
@@ -46,19 +53,30 @@ public class FrontControllerServlet extends HttpServlet {
 
     private void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws IOException, ServletException {
-        String pathInfo = request.getRequestURI().substring(request.getContextPath().length());
+        String pathInfo = request.getRequestURI().substring(request.getContextPath().length()); //recupere url sans le context path
         UrlMethod urlMethod = new UrlMethod(pathInfo, request.getMethod());
 
-        if (LoadingClass.isARouteInsideMappingWithMethod(urlMethod, routesWithMethod)) {
+        if (LoadingClass.isARouteInsideMappingWithMethod(urlMethod, routesWithMethod)) { //cherche route 
             Mapping mapping = routesWithMethod.get(urlMethod);
             System.out.println("Route trouvée : " + urlMethod + " -> " + mapping);
 
             try {
-                Object controller = mapping.getControllerClass().getDeclaredConstructor().newInstance();
-                Method controllerMethod = mapping.getMethod();
-                Object result = controllerMethod.invoke(controller);
+                Object controller = mapping.getControllerClass().getDeclaredConstructor().newInstance(); //cree le controller 
+                Method controllerMethod = mapping.getMethod(); //recupere le controller 
+                Class<?>[] parameterTypes = controllerMethod.getParameterTypes();
+                Object[] parameters = new Object[parameterTypes.length];
+                for (int i = 0; i < parameterTypes.length; i++) {
+                    Class<?> paramType = parameterTypes[i];
 
-                if (result instanceof ModAndView mav) {
+                    if (paramType.equals(ApplicationContext.class)) {   
+                        parameters[i] = springContext;
+                    } else {
+                        parameters[i] = null;
+                    }
+                }
+                Object result = controllerMethod.invoke(controller, parameters); //execute le controller avec les parametres
+
+                if (result instanceof ModAndView mav) { //si veux afficher une vue, on recupere les valeurs et on les met dans le request, puis on forward vers la vue
                     for (Map.Entry<String, Object> en : mav.getValues().entrySet()) {
                         request.setAttribute(en.getKey(), en.getValue());
                     }
@@ -71,19 +89,25 @@ public class FrontControllerServlet extends HttpServlet {
                     }
 
                     throw new ServletException("Aucune vue définie pour " + urlMethod);
-                }
-
-                if (result instanceof String text) {
+                    
+                } else if (result instanceof String text) {  //si le controller du json ou du text
                     response.setContentType("text/plain;charset=UTF-8");
-                    try (PrintWriter out = response.getWriter()) {
-                        out.println("Resultat de la methode:\n");
+                    if(LoadingClass.hasAnnotation(mapping.getControllerClass(), annotationRest)) { //si le controller a l'annotation @Rest
+                        response.setContentType("application/json;charset=UTF-8");
+                    }
+                    try (PrintWriter out = response.getWriter()) { //affiche le text ou le json
                         out.println(text);
                     }
                     return;
+                } else{ //si le controller retourne un objet, on le transforme en json
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    response.setContentType("application/json;charset=UTF-8"); //set le content type en json
+                    try (PrintWriter out = response.getWriter()) { // affiche le json
+                        String json = objectMapper.writeValueAsString(result);
+                        out.println(json);
+                    }
+                    return;
                 }
-
-                throw new ServletException(
-                        "Type de retour non supporté pour " + urlMethod + " : " + result.getClass().getName());
 
             } catch (InstantiationException | IllegalAccessException | InvocationTargetException
                     | NoSuchMethodException e) {
