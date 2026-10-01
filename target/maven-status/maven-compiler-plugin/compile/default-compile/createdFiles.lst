@@ -1,8 +1,17 @@
 johane/util/LoadingClass.class
 johane/util/UrlMethod.class
+<<<<<<< HEAD
 johane/util/ModAndView.class
 johane/annotation/MonController.class
 johane/listener/AppServletContextListener.class
 johane/annotation/UrlMapping.class
 johane/util/Mapping.class
+=======
+johane/listener/AppServletContextListener.class
+johane/util/ModAndView.class
+johane/annotation/MonController.class
+johane/annotation/UrlMapping.class
+johane/util/Mapping.class
+johane/annotation/RestController.class
+>>>>>>> 5c94f9c (stashed)
 johane/servlet/FrontControllerServlet.class

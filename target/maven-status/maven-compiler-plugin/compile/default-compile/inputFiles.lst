@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/listener/AppServletContextListener.java
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/servlet/FrontControllerServlet.java
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/util/UrlMethod.java
@@ -6,3 +7,14 @@
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/util/Mapping.java
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/annotation/MonController.java
 /home/johane/S4/webdinamique/Framework-johane/framework/src/main/java/johane/util/LoadingClass.java
+=======
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/annotation/MonController.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/annotation/RestController.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/annotation/UrlMapping.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/listener/AppServletContextListener.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/servlet/FrontControllerServlet.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/LoadingClass.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/Mapping.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/ModAndView.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/UrlMethod.java
+>>>>>>> 5c94f9c (stashed)
