@@ -7,3 +7,4 @@ johane/annotation/UrlMapping.class
 johane/util/Mapping.class
 johane/annotation/RestController.class
 johane/servlet/FrontControllerServlet.class
+johane/util/Binder.class
