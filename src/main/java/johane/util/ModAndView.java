@@ -11,7 +11,7 @@ public class ModAndView {
     }
     public ModAndView(String view, Map<String, Object> values) {
         this.view = view;
-        this.values = values;
+        this.values = values == null ? new HashMap<>() : new HashMap<>(values);
     }
 
     public String getView() {
@@ -26,8 +26,8 @@ public class ModAndView {
         return values;
     }
 
-    public void setValues(Map<String, Object> values) {
-        this.values = values;
+    public void setValues(Map<String, ?> values) {
+    this.values = values == null ? new HashMap<>() : new HashMap<>(values);
     }
 
     public void addValue(String key, Object value) {

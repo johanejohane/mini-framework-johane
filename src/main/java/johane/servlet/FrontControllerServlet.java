@@ -17,7 +17,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part; 
 import johane.util.Binder;
+import johane.util.FileUpload;
 import johane.util.LoadingClass;
 import johane.util.Mapping;
 import johane.util.ModAndView;
@@ -201,6 +203,30 @@ public class FrontControllerServlet extends HttpServlet {
         } else if (paramType.equals(LocalDate.class)) {
             String value = request.getParameter(paramName);
             if (value != null) return LocalDate.parse(value);
+
+        // [AJOUT] à insérer entre les lignes 203 et 204 d'origine (dans populateParameter, après la branche LocalDate) :
+        // paramètre de type FileUpload (un seul fichier uploadé)
+        // Exemple dans un controller : public ModAndView upload(FileUpload photo)
+        } else if (paramType.equals(FileUpload.class)) {
+            if (!FileUpload.isMultipart(request)) return null; // formulaire sans enctype="multipart/form-data"
+            try {
+                Part part = request.getPart(paramName); // paramName = nom du paramètre Java = name="" du <input type="file">
+                return part == null ? null : FileUpload.convertToFileUpload(part);
+            } catch (IOException e) {
+                throw new ServletException("Error reading file " + paramName, e);
+            }
+
+        // [AJOUT] paramètre de type FileUpload[] (plusieurs fichiers sous le même nom)
+        } else if (paramType.equals(FileUpload[].class)) {
+            if (!FileUpload.isMultipart(request)) return new FileUpload[0];
+            try {
+                return FileUpload.fromAll(request, paramName);
+            } catch (IOException e) {
+                throw new ServletException("Error reading files " + paramName, e);
+            }
+
+        // Ligne 204 d'origine, inchangée. IMPORTANT : cette branche doit rester APRES les deux
+        // branches FileUpload, sinon FileUpload serait traité comme un objet normal par le Binder.
         } else if (!paramType.isPrimitive()) {
             // tout autre type objet (ex: Employe) : on remplit ses setters avec les paramètres de la requête
             try {
