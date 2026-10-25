@@ -4,7 +4,9 @@
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/listener/AppServletContextListener.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/servlet/FrontControllerServlet.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/Binder.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/FileUpload.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/LoadingClass.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/Mapping.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/ModAndView.java
+/home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/MySession.java
 /home/johane/tomcat/webapps/projet/mini-framework-johane/src/main/java/johane/util/UrlMethod.java

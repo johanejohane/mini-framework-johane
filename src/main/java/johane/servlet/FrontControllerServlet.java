@@ -6,6 +6,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.context.ApplicationContext;
@@ -17,12 +19,14 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.Part; 
 import johane.util.Binder;
 import johane.util.FileUpload;
 import johane.util.LoadingClass;
 import johane.util.Mapping;
 import johane.util.ModAndView;
+import johane.util.MySession;
 import johane.util.UrlMethod;
 
 public class FrontControllerServlet extends HttpServlet {
@@ -75,10 +79,15 @@ public class FrontControllerServlet extends HttpServlet {
                 }
                 Object result = controllerMethod.invoke(controller, parameters); // exécute le controller
 
+                // [AJOUT SESSION] recopie les changements de MySession vers la vraie HttpSession
+                // (doit rester AVANT le "if (result == null) return;" sinon un controller void ne sauvegarde rien)
+                flushSessions(parameters, request);
+
                 if (result == null) {
                     return;
                 }
                 if (result instanceof ModAndView mav) { // vue : valeurs -> request, puis forward
+                   
                     if (mav.getValues() != null) {
                         for (Map.Entry<String, Object> en : mav.getValues().entrySet()) {
                             request.setAttribute(en.getKey(), en.getValue());
@@ -225,6 +234,12 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new ServletException("Error reading files " + paramName, e);
             }
 
+        // [AJOUT SESSION] paramètre de type MySession : on donne au controller une copie de la HttpSession
+        // IMPORTANT : cette branche doit aussi rester AVANT la branche "objet" ci-dessous (sinon le Binder
+        // créerait un MySession vide au lieu de celui qui contient la session)
+        } else if (paramType.equals(MySession.class)) {
+            return buildMySession(request);
+
         // Ligne 204 d'origine, inchangée. IMPORTANT : cette branche doit rester APRES les deux
         // branches FileUpload, sinon FileUpload serait traité comme un objet normal par le Binder.
         } else if (!paramType.isPrimitive()) {
@@ -246,6 +261,36 @@ public class FrontControllerServlet extends HttpServlet {
             return method.isAnnotationPresent(restAnnotationClass);
         } catch (ClassNotFoundException e) {
             throw new ServletException("Annotation REST introuvable : " + annotationRest, e);
+        }
+    }
+
+    // [AJOUT SESSION] Construit un MySession contenant une copie des attributs de la HttpSession courante.
+    private MySession buildMySession(HttpServletRequest request) {
+        HttpSession httpSession = request.getSession(true);
+        Map<String, Object> copy = new LinkedHashMap<>();
+        for (String name : Collections.list(httpSession.getAttributeNames())) {
+            copy.put(name, httpSession.getAttribute(name));
+        }
+        return new MySession(copy);
+    }
+
+    // [AJOUT SESSION] Pour chaque paramètre MySession du controller : supprime de la HttpSession les attributs
+    // qui ne sont plus dans le MySession, puis écrit (ou met à jour) tous ceux qui y sont.
+    private void flushSessions(Object[] parameters, HttpServletRequest request) {
+        for (Object p : parameters) {
+            if (!(p instanceof MySession ms)) {
+                continue;
+            }
+            HttpSession httpSession = request.getSession(true);
+            Map<String, Object> data = ms.getSessionData();
+            for (String name : Collections.list(httpSession.getAttributeNames())) {
+                if (!data.containsKey(name)) {
+                    httpSession.removeAttribute(name);
+                }
+            }
+            for (Map.Entry<String, Object> en : data.entrySet()) {
+                httpSession.setAttribute(en.getKey(), en.getValue());
+            }
         }
     }
 }
