@@ -18,6 +18,8 @@ public class AppServletContextListener implements ServletContextListener {
     String viewSuffix;
     String annotationRest;
     Map<UrlMethod, Mapping> toutesLesRoutes;
+    String userSessionKey;
+    String roleSessionKey;
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
@@ -26,6 +28,9 @@ public class AppServletContextListener implements ServletContextListener {
         try {
             ApplicationContext springContext = org.springframework.web.context.support.WebApplicationContextUtils
             .getRequiredWebApplicationContext(sce.getServletContext());
+
+            userSessionKey = requiredInitParam(sce, "auth.user-session-key");
+            roleSessionKey = requiredInitParam(sce, "auth.role-session-key");
 
             toutesLesRoutes = new HashMap<>();
             Properties prop = new Properties();
@@ -52,13 +57,24 @@ public class AppServletContextListener implements ServletContextListener {
             sce.getServletContext().setAttribute("suffix", viewSuffix);
             sce.getServletContext().setAttribute("springContext", springContext);
             sce.getServletContext().setAttribute("annotationRest", annotationRest);
+            sce.getServletContext().setAttribute("userSessionKey", userSessionKey);
+            sce.getServletContext().setAttribute("roleSessionKey", roleSessionKey);
 
             System.out.println("[SUCCESS] Scan terminé avec succès. " + toutesLesRoutes.size() + " routes chargées.");
 
         } catch (IllegalStateException e) {
             System.err.println("[ERREUR CRITIQUE DÉMARRAGE] " + e.getMessage());
-            throw new RuntimeException("Échec du déploiement de l'application à cause d'un conflit de routes.", e);
+            throw new RuntimeException("Déploiement impossible → " + e.getMessage(), e);
         }
+    }
+
+    // [AJOUT AUTH] Lit un paramètre <context-param> du web.xml et refuse de démarrer s'il manque.
+    private String requiredInitParam(ServletContextEvent sce, String name) {
+        String value = sce.getServletContext().getInitParameter(name);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Paramètre obligatoire absent du web.xml : " + name);
+        }
+        return value;
     }
 
     @Override
