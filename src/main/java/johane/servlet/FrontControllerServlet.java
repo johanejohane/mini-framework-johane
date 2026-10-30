@@ -8,6 +8,7 @@ import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.context.ApplicationContext;
@@ -21,6 +22,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.Part; 
+import johane.annotation.Auth;
 import johane.util.Binder;
 import johane.util.FileUpload;
 import johane.util.LoadingClass;
@@ -36,6 +38,8 @@ public class FrontControllerServlet extends HttpServlet {
     String viewSuffix;
     String annotationRest;
     ApplicationContext springContext;
+    String userSessionKey;
+    String roleSessionKey;
 
     @SuppressWarnings("unchecked")
     @Override
@@ -46,6 +50,8 @@ public class FrontControllerServlet extends HttpServlet {
         viewSuffix = (String) getServletContext().getAttribute("suffix");
         annotationRest = (String) getServletContext().getAttribute("annotationRest");
         springContext = (ApplicationContext) getServletContext().getAttribute("springContext");
+        userSessionKey = (String) getServletContext().getAttribute("userSessionKey");
+        roleSessionKey = (String) getServletContext().getAttribute("roleSessionKey");
     }
 
     @Override
@@ -70,8 +76,11 @@ public class FrontControllerServlet extends HttpServlet {
             System.out.println("Route trouvée : " + urlMethod + " -> " + mapping);
 
             try {
-                Object controller = mapping.getControllerClass().getDeclaredConstructor().newInstance(); // crée le controller
                 Method controllerMethod = mapping.getMethod(); // récupère la méthode
+                if (!isAccessGranted(controllerMethod, request, response, urlMethod)) { // [AJOUT AUTH]
+                    return;
+                }
+                Object controller = mapping.getControllerClass().getDeclaredConstructor().newInstance(); // crée le controller
                 Class<?>[] parameterTypes = controllerMethod.getParameterTypes();
                 Object[] parameters = new Object[parameterTypes.length];
                 for (int i = 0; i < parameterTypes.length; i++) {
@@ -262,6 +271,35 @@ public class FrontControllerServlet extends HttpServlet {
         } catch (ClassNotFoundException e) {
             throw new ServletException("Annotation REST introuvable : " + annotationRest, e);
         }
+    }
+
+    // [AJOUT AUTH] Applique @Auth : renvoie true si la requête peut continuer,
+    // sinon envoie 401 (non connecté) ou 403 (rôle insuffisant) et renvoie false.
+    private boolean isAccessGranted(Method method, HttpServletRequest request,
+            HttpServletResponse response, UrlMethod urlMethod) throws IOException {
+        Auth auth = method.getAnnotation(Auth.class);
+        if (auth == null) {
+            return true; // méthode non protégée
+        }
+
+        HttpSession httpSession = request.getSession(false);
+        if (httpSession == null || httpSession.getAttribute(userSessionKey) == null) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+                    "Vous devez être connecté pour accéder à " + urlMethod);
+            return false;
+        }
+
+        String[] allowedRoles = auth.roles();
+        if (allowedRoles.length == 0) {
+            return true; // connecté suffit
+        }
+
+        Object currentRole = httpSession.getAttribute(roleSessionKey);
+        if (currentRole == null || !List.of(allowedRoles).contains(currentRole.toString())) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Rôle insuffisant");
+            return false;
+        }
+        return true;
     }
 
     // [AJOUT SESSION] Construit un MySession contenant une copie des attributs de la HttpSession courante.
