@@ -9,7 +9,7 @@ public class ModAndView {
     public ModAndView() {
         this.values = new HashMap<>();
     }
-    public ModAndView(String view, Map<String, Object> values) {
+    public ModAndView(String view, Map<String, ?> values) { 
         this.view = view;
         this.values = values == null ? new HashMap<>() : new HashMap<>(values);
     }
