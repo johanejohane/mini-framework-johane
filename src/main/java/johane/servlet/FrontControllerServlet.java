@@ -3,13 +3,12 @@ package johane.servlet;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap; // []
 
 import org.springframework.context.ApplicationContext;
 
@@ -40,6 +39,8 @@ public class FrontControllerServlet extends HttpServlet {
     ApplicationContext springContext;
     String userSessionKey;
     String roleSessionKey;
+    Map<String, MySession> mySessionsById; // [ SESSION] registre partagé avec le listener
+    Map<Class<?>, Object> controllerInstances; // [ CONTROLLER] un controller par classe
 
     @SuppressWarnings("unchecked")
     @Override
@@ -52,6 +53,8 @@ public class FrontControllerServlet extends HttpServlet {
         springContext = (ApplicationContext) getServletContext().getAttribute("springContext");
         userSessionKey = (String) getServletContext().getAttribute("userSessionKey");
         roleSessionKey = (String) getServletContext().getAttribute("roleSessionKey");
+        mySessionsById = (Map<String, MySession>) getServletContext().getAttribute("sessions"); // [ SESSION]
+        controllerInstances = new ConcurrentHashMap<>(); // [ CONTROLLER]
     }
 
     @Override
@@ -77,10 +80,10 @@ public class FrontControllerServlet extends HttpServlet {
 
             try {
                 Method controllerMethod = mapping.getMethod(); // récupère la méthode
-                if (!isAccessGranted(controllerMethod, request, response, urlMethod)) { // [AJOUT AUTH]
+                if (!isAccessGranted(controllerMethod, request, response, urlMethod)) { // [ AUTH]
                     return;
                 }
-                Object controller = mapping.getControllerClass().getDeclaredConstructor().newInstance(); // crée le controller
+                Object controller = controllerOf(mapping.getControllerClass()); // [MODIF] réutilise le controller
                 Class<?>[] parameterTypes = controllerMethod.getParameterTypes();
                 Object[] parameters = new Object[parameterTypes.length];
                 for (int i = 0; i < parameterTypes.length; i++) {
@@ -88,7 +91,7 @@ public class FrontControllerServlet extends HttpServlet {
                 }
                 Object result = controllerMethod.invoke(controller, parameters); // exécute le controller
 
-                // [AJOUT SESSION] recopie les changements de MySession vers la vraie HttpSession
+                // [ SESSION] recopie les changements de MySession vers la vraie HttpSession
                 // (doit rester AVANT le "if (result == null) return;" sinon un controller void ne sauvegarde rien)
                 flushSessions(parameters, request);
 
@@ -131,8 +134,7 @@ public class FrontControllerServlet extends HttpServlet {
                     return;
                 }
 
-            } catch (InstantiationException | IllegalAccessException | InvocationTargetException
-                    | NoSuchMethodException e) {
+            } catch (ReflectiveOperationException e) { // [MODIF] couvre aussi l'instanciation faite dans controllerOf
                 throw new RuntimeException("Impossible d'exécuter la méthode liée à " + urlMethod, e);
             }
         } else {
@@ -222,7 +224,7 @@ public class FrontControllerServlet extends HttpServlet {
             String value = request.getParameter(paramName);
             if (value != null) return LocalDate.parse(value);
 
-        // [AJOUT] à insérer entre les lignes 203 et 204 d'origine (dans populateParameter, après la branche LocalDate) :
+        // [] à insérer entre les lignes 203 et 204 d'origine (dans populateParameter, après la branche LocalDate) :
         // paramètre de type FileUpload (un seul fichier uploadé)
         // Exemple dans un controller : public ModAndView upload(FileUpload photo)
         } else if (paramType.equals(FileUpload.class)) {
@@ -234,7 +236,7 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new ServletException("Error reading file " + paramName, e);
             }
 
-        // [AJOUT] paramètre de type FileUpload[] (plusieurs fichiers sous le même nom)
+        // [] paramètre de type FileUpload[] (plusieurs fichiers sous le même nom)
         } else if (paramType.equals(FileUpload[].class)) {
             if (!FileUpload.isMultipart(request)) return new FileUpload[0];
             try {
@@ -243,11 +245,11 @@ public class FrontControllerServlet extends HttpServlet {
                 throw new ServletException("Error reading files " + paramName, e);
             }
 
-        // [AJOUT SESSION] paramètre de type MySession : on donne au controller une copie de la HttpSession
+        // [ SESSION] paramètre de type MySession : on donne au controller une copie de la HttpSession
         // IMPORTANT : cette branche doit aussi rester AVANT la branche "objet" ci-dessous (sinon le Binder
         // créerait un MySession vide au lieu de celui qui contient la session)
         } else if (paramType.equals(MySession.class)) {
-            return buildMySession(request);
+            return mySessionOf(request); // [MODIF] MySession conservé par identifiant de session
 
         // Ligne 204 d'origine, inchangée. IMPORTANT : cette branche doit rester APRES les deux
         // branches FileUpload, sinon FileUpload serait traité comme un objet normal par le Binder.
@@ -273,7 +275,7 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-    // [AJOUT AUTH] Applique @Auth : renvoie true si la requête peut continuer,
+    // [ AUTH] Applique @Auth : renvoie true si la requête peut continuer,
     // sinon envoie 401 (non connecté) ou 403 (rôle insuffisant) et renvoie false.
     private boolean isAccessGranted(Method method, HttpServletRequest request,
             HttpServletResponse response, UrlMethod urlMethod) throws IOException {
@@ -302,17 +304,35 @@ public class FrontControllerServlet extends HttpServlet {
         return true;
     }
 
-    // [AJOUT SESSION] Construit un MySession contenant une copie des attributs de la HttpSession courante.
-    private MySession buildMySession(HttpServletRequest request) {
+    // [ SESSION] Retrouve (ou crée) le MySession lié à l'identifiant de la HttpSession,
+    // puis y recopie les attributs actuels de la HttpSession. Le même objet sert donc à toutes
+    // les requêtes d'un même utilisateur.
+    private MySession mySessionOf(HttpServletRequest request) {
         HttpSession httpSession = request.getSession(true);
-        Map<String, Object> copy = new LinkedHashMap<>();
+        MySession mine = mySessionsById.computeIfAbsent(httpSession.getId(), id -> new MySession());
         for (String name : Collections.list(httpSession.getAttributeNames())) {
-            copy.put(name, httpSession.getAttribute(name));
+            mine.setAttribute(name, httpSession.getAttribute(name));
         }
-        return new MySession(copy);
+        return mine;
     }
 
-    // [AJOUT SESSION] Pour chaque paramètre MySession du controller : supprime de la HttpSession les attributs
+    // [ CONTROLLER] Un seul objet controller par classe : créé à la première requête
+    // qui en a besoin, puis réutilisé (double vérification pour ne l'instancier qu'une fois).
+    private Object controllerOf(Class<?> type) throws ReflectiveOperationException {
+        Object instance = controllerInstances.get(type);
+        if (instance == null) {
+            synchronized (controllerInstances) {
+                instance = controllerInstances.get(type);
+                if (instance == null) {
+                    instance = type.getDeclaredConstructor().newInstance();
+                    controllerInstances.put(type, instance);
+                }
+            }
+        }
+        return instance;
+    }
+
+    // [ SESSION] Pour chaque paramètre MySession du controller : supprime de la HttpSession les attributs
     // qui ne sont plus dans le MySession, puis écrit (ou met à jour) tous ceux qui y sont.
     private void flushSessions(Object[] parameters, HttpServletRequest request) {
         for (Object p : parameters) {

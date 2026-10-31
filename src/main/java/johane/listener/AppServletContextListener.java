@@ -5,11 +5,13 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap; 
 import org.springframework.context.ApplicationContext;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
 import johane.util.LoadingClass;
 import johane.util.Mapping;
+import johane.util.MySession;
 import johane.util.UrlMethod; 
 public class AppServletContextListener implements ServletContextListener {
 
@@ -18,6 +20,7 @@ public class AppServletContextListener implements ServletContextListener {
     String viewSuffix;
     String annotationRest;
     Map<UrlMethod, Mapping> toutesLesRoutes;
+    Map<String, MySession> mySessionsById; 
     String userSessionKey;
     String roleSessionKey;
 
@@ -31,6 +34,8 @@ public class AppServletContextListener implements ServletContextListener {
 
             userSessionKey = requiredInitParam(sce, "auth.user-session-key");
             roleSessionKey = requiredInitParam(sce, "auth.role-session-key");
+
+            mySessionsById = new ConcurrentHashMap<>();
 
             toutesLesRoutes = new HashMap<>();
             Properties prop = new Properties();
@@ -59,6 +64,7 @@ public class AppServletContextListener implements ServletContextListener {
             sce.getServletContext().setAttribute("annotationRest", annotationRest);
             sce.getServletContext().setAttribute("userSessionKey", userSessionKey);
             sce.getServletContext().setAttribute("roleSessionKey", roleSessionKey);
+            sce.getServletContext().setAttribute("sessions", mySessionsById); 
 
             System.out.println("[SUCCESS] Scan terminé avec succès. " + toutesLesRoutes.size() + " routes chargées.");
 
@@ -68,7 +74,7 @@ public class AppServletContextListener implements ServletContextListener {
         }
     }
 
-    // [AJOUT AUTH] Lit un paramètre <context-param> du web.xml et refuse de démarrer s'il manque.
+    
     private String requiredInitParam(ServletContextEvent sce, String name) {
         String value = sce.getServletContext().getInitParameter(name);
         if (value == null || value.isBlank()) {
